@@ -1,0 +1,121 @@
+name: Build APK (Simplified)
+
+on:
+  push:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.9'
+        
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          python3-pip \
+          python3-dev \
+          build-essential \
+          git \
+          python3 \
+          python3-setuptools \
+          python3-wheel \
+          python3-cffi \
+          libcairo2-dev \
+          libpango1.0-dev \
+          libgdk-pixbuf2.0-dev \
+          libffi-dev \
+          shared-mime-info \
+          libjpeg-dev \
+          libopenjp2-7-dev \
+          libtiff5-dev \
+          libfreetype6-dev \
+          liblcms2-dev \
+          libwebp-dev \
+          libharfbuzz-dev \
+          libfribidi-dev \
+          libxcb1-dev \
+          libgstreamer1.0-dev \
+          libgstreamer-plugins-base1.0-dev \
+          libgstreamer-plugins-bad1.0-dev \
+          gstreamer1.0-plugins-base \
+          gstreamer1.0-plugins-extra \
+          gstreamer1.0-plugins-good \
+          gstreamer1.0-libav \
+          gstreamer1.0-tools \
+          gstreamer1.0-x \
+          gstreamer1.0-alsa \
+          gstreamer1.0-gl \
+          gstreamer1.0-gtk3 \
+          gstreamer1.0-qt5 \
+          gstreamer1.0-pulseaudio \
+          libgirepository1.0-dev
+          
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install buildozer
+        pip install cython==0.29.33
+        pip install kivy[base]
+        
+    - name: Setup Android environment
+      run: |
+        mkdir -p $HOME/.buildozer
+        cd $HOME/.buildozer
+        
+        # Download and setup Android SDK
+        wget -q https://dl.google.com/android/repository/commandlinetools-linux-8512546_latest.zip
+        unzip -q commandlinetools-linux-8512546_latest.zip
+        mkdir -p android-sdk/cmdline-tools
+        mv cmdline-tools android-sdk/cmdline-tools/latest
+        
+        # Set environment variables
+        export ANDROID_HOME=$HOME/.buildozer/android-sdk
+        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+        echo "ANDROID_HOME=$HOME/.buildozer/android-sdk" >> $GITHUB_ENV
+        echo "$HOME/.buildozer/android-sdk/cmdline-tools/latest/bin" >> $GITHUB_PATH
+        
+    - name: Install Android SDK components
+      run: |
+        export ANDROID_HOME=$HOME/.buildozer/android-sdk
+        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+        
+        # Accept licenses
+        yes | sdkmanager --licenses || true
+        
+        # Install required components
+        sdkmanager "platform-tools" "platforms;android-31" "build-tools;31.0.0" "ndk;23.1.7779620"
+        
+    - name: Build APK
+      run: |
+        export ANDROID_HOME=$HOME/.buildozer/android-sdk
+        export PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin
+        export JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64
+        
+        # Initialize buildozer
+        buildozer init
+        
+        # Build APK
+        buildozer android debug
+        
+    - name: Upload APK
+      uses: actions/upload-artifact@v3
+      with:
+        name: funapp-debug
+        path: bin/*.apk
+        
+    - name: Upload build logs
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-logs
+        path: .buildozer/logs/
